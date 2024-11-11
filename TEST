@@ -1,0 +1,53 @@
+
+import pandas as pd
+import numpy as np
+from pymongo import MongoClient
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import classification_report
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+import scipy.sparse as sp
+
+
+df = pd.read_csv('New Institutes.csv')
+print("Missing values before filling:")
+print(df.isnull().sum())
+
+
+df['state'].fillna(df['state'].mode()[0])
+df['application_status'].fillna('Pending')
+df.dropna(subset=['state', 'institute_name'])
+
+
+client = MongoClient('mongodb://localhost:27017/') 
+db = client['institutes_db']
+collection = db['applications']
+for row in df.iterrows():
+    document = row.to_dict()
+    collection.insert_one(document)
+
+
+pipeline = [
+    {
+        "$group": {
+            "_id": "$state",      
+            "count": {"$sum": 1}  
+        }
+    }
+]
+
+result = collection.aggregate(pipeline)
+
+print("\nApplications per state (from MongoDB):")
+for r in result:
+    print(f"State: {r['_id']}, Applications: {r['count']}")
+le_state = LabelEncoder()
+df['state_encoded'] = le_state.fit_transform(df['state'])
+
+vectorizer = TfidfVectorizer(max_features=50)  # Limit to top 50 features for simplicity
+X_institute = vectorizer.fit_transform(df['institute_name'])
+
+
+X = sp.hstack([df[['state_encoded']].values, X_institute])  
+
